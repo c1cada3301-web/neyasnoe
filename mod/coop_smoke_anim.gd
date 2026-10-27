@@ -7,6 +7,11 @@ extends Reference
 # В анимации рука то у рта, то опущена за кадр. Опущенная рука в осях рук смотрит в сторону,
 # у скина это выглядит как вытянутая рука, поэтому вес смешивания зависит от того, насколько
 # рука близко ко рту: у рта — поза из анимации, вдали — обычная ходьба или стойка скина.
+#
+# Огонёк зажигалки и дым выдоха — те же узлы игры из сцены рук (LighterSpark1, LighterFire1,
+# FireLight, SmokeParticles). Копию рук ставим так, как руки стоят у камеры игрока: на 0.8 м
+# ниже глаз и развёрнутой вперёд, тогда дым идёт изо рта, а огонёк — у подбородка. Скрипт рук
+# включает их по таймеру; скрипты мы снимаем и повторяем то же расписание сами (TIMELINE).
 
 const HANDS_SCENE = "res://Prefabs/PlayerSmokingHands1.tscn"
 const ANIMATION = "PlayerSmoking1"
@@ -17,6 +22,20 @@ const CIGARETTE_BONE = "LeftHandIndex2"
 const NEAR_RATIO = 1.2
 const FAR_RATIO = 2.6
 const KEEP_TYPES = ["Skeleton", "AnimationPlayer"]
+const EFFECTS = ["FireLight", "LighterSpark1", "LighterFire1", "SmokeParticles", "SmokingSound"]
+# Дым игры рассчитан на камеру у самого лица; со стороны те же клубы затягивают весь кадр.
+const SMOKE_SCALE = 0.3
+const SMOKE_SPEED = 0.5
+const SMOKE_AMOUNT = 16
+const HANDS_BELOW_EYES = 0.8       # как в Player.tscn: руки на камере, сдвиг (0, −0.8, 0)
+const EYES_ABOVE_MOUTH = 0.1
+# Расписание из PlayerSmokingHands1.gd, секунды от начала затяжки.
+const SPARK = [1.75, 1.8]
+const FLAME = [1.8, 2.3]
+const SMOKE = [[4.0, 7.0], [10.0, 12.0], [16.0, 17.0], [20.0, 25.0]]
+# Яркость кончика сигареты: [с какой секунды, яркость]; 5 — затяжка, 1 — тлеет.
+const EMBER = [[0.0, 0.0], [1.75, 1.0], [2.3, 5.0], [4.0, 1.0], [8.0, 5.0], [9.0, 1.0],
+	[13.0, 5.0], [14.0, 1.0], [18.0, 5.0], [20.0, 1.0]]
 
 var hands                       # невидимая копия рук: Spatial → Armature (Skeleton) → AnimationPlayer
 var hands_skel
@@ -35,14 +54,17 @@ var cigarette_bone = -1
 
 # owner — узел, под которым живёт копия рук (аватар); skel — скелет скина.
 # Возвращает false, если анимацию на этот скин переложить нельзя.
-func setup(owner, skel):
+func setup(owner, skel, mouth_height):
 	var packed = load(HANDS_SCENE)
 	if packed == null or skel == null:
 		return false
 	hands = packed.instance()
 	_strip(hands)
-	hands.visible = false
+	hands.translation = Vector3(0, mouth_height + EYES_ABOVE_MOUTH - HANDS_BELOW_EYES, 0)
+	hands.rotation.y = PI   # у рук перёд — +Z, у аватара — −Z
+	_shrink_smoke(hands.get_node_or_null("SmokeParticles"))
 	owner.add_child(hands)
+	effects(-1.0)
 	hands_skel = hands.get_node_or_null("Armature")
 	player = hands_skel.get_node_or_null("AnimationPlayer") if hands_skel else null
 	if player == null or not player.has_animation(ANIMATION):
@@ -80,6 +102,7 @@ func free_hands():
 
 # Кадр t анимации поверх уже выставленной позы скина (ходьба или стойка). Возвращает вес 0..1.
 func apply(skel, t):
+	effects(t)
 	if t >= length:
 		return 0.0
 	player.seek(t, true)
@@ -104,6 +127,44 @@ func apply(skel, t):
 		skel.set_bone_pose(db, Transform(Basis(blended), pose.origin))
 		placed[db] = (parent_g * skel.get_bone_rest(db).basis.orthonormalized() * Basis(blended)).orthonormalized()
 	return weight
+
+
+# Огонёк, свет зажигалки и дым выдоха по расписанию игры; t < 0 — всё выключить.
+func effects(t):
+	var node = hands.get_node_or_null("LighterSpark1")
+	if node:
+		node.visible = t >= SPARK[0] and t < SPARK[1]
+	node = hands.get_node_or_null("FireLight")
+	if node:
+		node.visible = t >= SPARK[0] and t < SPARK[1]
+	node = hands.get_node_or_null("LighterFire1")
+	if node:
+		node.visible = t >= FLAME[0] and t < FLAME[1]
+	node = hands.get_node_or_null("SmokeParticles")
+	if node:
+		var on = false
+		for span in SMOKE:
+			on = on or (t >= span[0] and t < span[1])
+		node.emitting = on
+
+
+static func _shrink_smoke(particles):
+	if not (particles is Particles) or particles.process_material == null:
+		return
+	var mat = particles.process_material.duplicate()
+	mat.scale *= SMOKE_SCALE
+	mat.initial_velocity *= SMOKE_SPEED
+	particles.process_material = mat
+	particles.amount = SMOKE_AMOUNT
+
+
+# Яркость кончика сигареты сейчас (как emission_energy у сигареты в руках игрока).
+static func ember(t):
+	var energy = 0.0
+	for step in EMBER:
+		if t >= step[0]:
+			energy = step[1]
+	return energy
 
 
 # Где сейчас пальцы с сигаретой у скина (глобально); null, если такой кости нет.
@@ -148,15 +209,18 @@ static func _rest_global(skel, bone):
 	return t
 
 
-# Из копии рук убираем всё, кроме скелета, проигрывателя и звука затяжки: свет зажигалки, дым,
-# AnimationTree и скрипты игры (они ищут игрока и трогают его фонарик).
+# Из копии рук оставляем скелет, проигрыватель и эффекты; убираем AnimationTree, звук «+1 к
+# телесности» и скрипты игры (они ищут игрока и трогают его фонарик). Сами руки прячем.
 static func _strip(node):
 	node.set_script(null)
 	for child in node.get_children():
 		if child.get_class() in KEEP_TYPES or child.name == "Armature":
 			_strip(child)
-		elif child.name == "SmokingSound":
-			pass   # анимация сама включает звук затяжки: друг слышит его рядом с аватаром
+		elif child.name in EFFECTS:
+			# звук затяжки включает сама анимация; огонёк — меш, привязанный «скелетом» к свету
+			if child is MeshInstance:
+				child.skeleton = NodePath("")
+			child.set_script(null)
 		elif child is MeshInstance and node is Skeleton:
 			child.visible = false   # сами руки: нужен только их скелет
 		else:

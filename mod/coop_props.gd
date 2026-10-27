@@ -10,6 +10,8 @@ const MOUTH_FORWARD = 0.1                 # аватар смотрит в −Z
 const DEFAULT_MOUTH_HEIGHT = 1.62
 const CIGARETTE_LENGTH = 0.08
 const CIGARETTE_RADIUS = 0.005
+const EMBER_IDLE = 1.0
+const EMBER_SCALE = 1.2
 const FLASHLIGHT_HEIGHT = 1.6
 # Как у фонарика игрока (Player.tscn → RotationHelper/Flashlight), но без теней:
 # свет чужого фонаря тени не стоит, а атлас теней у игры небольшой.
@@ -71,6 +73,7 @@ static func _cigarette():
 	dot.rings = 4
 	tip.mesh = dot
 	tip.material_override = ember
+	tip.name = "Ember"
 	tip.translation = Vector3(0, 0, CIGARETTE_LENGTH)
 	root.add_child(tip)
 	var smoke = CPUParticles.new()
@@ -115,6 +118,14 @@ static func flashlight():
 	light.translation = Vector3(0, FLASHLIGHT_HEIGHT, 0)
 	light.visible = false
 	return light
+
+
+# Кончик сигареты: 0 — не горит, 1 — тлеет, 5 — затяжка (как у сигареты в руках игрока).
+static func set_ember(cigarette, energy):
+	var tip = cigarette.get_node_or_null("Ember")
+	if tip and tip.material_override:
+		tip.material_override.emission_energy = energy * EMBER_SCALE
+		tip.visible = energy > 0.0
 
 
 static func _find_skeleton(node):

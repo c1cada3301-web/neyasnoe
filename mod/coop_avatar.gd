@@ -99,7 +99,7 @@ func set_skin(id):
 		smoke.free_hands()
 	skeleton = Props._find_skeleton(skin["node"])
 	smoke = SmokeAnim.new()
-	if not smoke.setup(self, skeleton):
+	if not smoke.setup(self, skeleton, mouth_spot.y):
 		smoke.free_hands()
 		smoke = null
 	_update_props()
@@ -243,8 +243,12 @@ func _animate_smoking(delta):
 	var animating = smoke != null and smoking and not driving_now and smoke_time < smoke.length
 	if not animating:
 		cigarette.translation = mouth_spot
+		if smoke:
+			smoke.effects(-1.0)
+		Props.set_ember(cigarette, Props.EMBER_IDLE)
 		return
 	smoke.apply(skeleton, smoke_time)
+	Props.set_ember(cigarette, smoke.ember(smoke_time))
 	smoke_time += delta
 	var fingers = smoke.cigarette_point(skeleton)
 	if fingers != null:
