@@ -1,7 +1,7 @@
 extends Reference
 # Что друг держит и включил: сигарета во рту и фонарик. В игре курение видно только от первого
 # лица (руки игрока), а у прохожих-скинов анимации курения нет, поэтому сигарету собираем сами:
-# тонкий цилиндр с тлеющим кончиком и дымок у рта. Высоту рта берём от макушки скелета скина
+# тонкий цилиндр с тлеющим кончиком у рта (дым выдоха — из сцены рук, coop_smoke_anim.gd). Высоту рта берём от макушки скелета скина
 # (у скинов разный рост); голова в анимациях ходьбы почти не двигается, поэтому крепим к аватару.
 
 const HEAD_TOP_SUFFIX = "HeadTop_End"     # mixamorig_HeadTop_End / mixamorigHeadTop_End
@@ -11,7 +11,6 @@ const DEFAULT_MOUTH_HEIGHT = 1.62
 const CIGARETTE_LENGTH = 0.08
 const CIGARETTE_RADIUS = 0.005
 const EMBER_IDLE = 1.0
-const SMOKE_TEXTURE = "res://Assets/Textures/SmokeParticle2.png"   # дым выдоха игрока
 # Зажигалка: в игре она часть меша рук, отдельной модели нет — собираем коробочку сами.
 const LIGHTER_SIZE = Vector3(0.022, 0.06, 0.012)
 const LIGHTER_COLOR = Color(0.55, 0.08, 0.06)
@@ -46,7 +45,7 @@ static func _mouth_height(avatar, skin_root):
 	return DEFAULT_MOUTH_HEIGHT
 
 
-# Цилиндр вдоль +Z (от губ вперёд), оранжевый кончик и дым с кончика.
+# Цилиндр вдоль +Z (от губ вперёд) и оранжевый кончик.
 static func _cigarette():
 	var root = Spatial.new()
 	root.name = "CoopCigarette"
@@ -80,36 +79,6 @@ static func _cigarette():
 	tip.name = "Ember"
 	tip.translation = Vector3(0, 0, CIGARETTE_LENGTH)
 	root.add_child(tip)
-	var smoke = CPUParticles.new()
-	smoke.amount = 12
-	smoke.lifetime = 2.5
-	smoke.local_coords = false
-	smoke.direction = Vector3.UP
-	smoke.spread = 15.0
-	smoke.gravity = Vector3(0, 0.15, 0)
-	smoke.initial_velocity = 0.12
-	smoke.scale_amount = 0.6
-	smoke.scale_amount_random = 0.4
-	smoke.angle_random = 1.0
-	smoke.angular_velocity = 20.0
-	smoke.angular_velocity_random = 1.0
-	var puff = QuadMesh.new()
-	puff.size = Vector2(0.06, 0.06)
-	var haze = SpatialMaterial.new()
-	haze.albedo_texture = load(SMOKE_TEXTURE)   # мягкий клуб из игры, а не квадратик
-	haze.flags_transparent = true
-	haze.flags_unshaded = true
-	haze.params_billboard_mode = SpatialMaterial.BILLBOARD_PARTICLES
-	haze.vertex_color_use_as_albedo = true
-	haze.albedo_color = Color(0.8, 0.8, 0.8, 0.25)
-	puff.material = haze
-	smoke.mesh = puff
-	var fade = Gradient.new()
-	fade.set_color(0, Color(1, 1, 1, 0.6))
-	fade.set_color(1, Color(1, 1, 1, 0.0))
-	smoke.color_ramp = fade
-	smoke.translation = Vector3(0, 0, CIGARETTE_LENGTH)
-	root.add_child(smoke)
 	return root
 
 
