@@ -6,6 +6,7 @@ extends Spatial
 var Skins = load("user://mods/coop_skins.gd")
 var Ghost = load("user://mods/coop_ghost_car.gd")
 var Props = load("user://mods/coop_props.gd")
+var SmokeAnim = load("user://mods/coop_smoke_anim.gd")
 
 const WALK_THRESHOLD = 0.5
 const FOLLOW_SPEED = 12.0
@@ -33,6 +34,10 @@ var smoking = false
 var lit = false
 var pitch = 0.0
 var driving_now = false
+var smoke                       # анимация курения с рук игрока, переложенная на скин
+var smoke_time = 0.0
+var skeleton
+var mouth_spot = Vector3()      # где сигарета, пока рука не у рта
 
 
 func _ready():
@@ -82,6 +87,17 @@ func set_skin(id):
 	if cigarette and is_instance_valid(cigarette):
 		cigarette.queue_free()
 	cigarette = Props.attach_cigarette(self, skin["node"])
+	mouth_spot = cigarette.translation
+	if skin["player"]:
+		# позу ходьбы выставляем сами в _process, чтобы сразу поверх положить руку с сигаретой
+		skin["player"].playback_process_mode = AnimationPlayer.ANIMATION_PROCESS_MANUAL
+	if smoke:
+		smoke.free_hands()
+	skeleton = Props._find_skeleton(skin["node"])
+	smoke = SmokeAnim.new()
+	if not smoke.setup(self, skeleton):
+		smoke.free_hands()
+		smoke = null
 	_update_props()
 
 
@@ -103,6 +119,8 @@ func push_state(pos, yaw, move_speed, id, driving = false):
 
 # Курит ли друг, горит ли у него фонарик и куда он смотрит (наклон головы, радианы).
 func push_props(is_smoking, is_lit, look_pitch):
+	if is_smoking and not smoking:
+		smoke_time = 0.0   # друг только что закурил: анимация с начала
 	smoking = is_smoking
 	lit = is_lit
 	pitch = clamp(look_pitch, -1.5, 1.5)
@@ -206,7 +224,25 @@ func _process(delta):
 			Skins.play_walk(skin)
 		else:
 			Skins.play_idle(skin)
+		if skin["player"]:
+			skin["player"].advance(delta)
+		_animate_smoking(delta)
 	_update_label()
+
+
+# Левая рука с сигаретой поверх ходьбы; сигарета едет за пальцами, пока идёт анимация.
+func _animate_smoking(delta):
+	if cigarette == null or not is_instance_valid(cigarette):
+		return
+	var animating = smoke != null and smoking and not driving_now and smoke_time < smoke.length
+	if not animating:
+		cigarette.translation = mouth_spot
+		return
+	smoke.apply(skeleton, smoke_time)
+	smoke_time += delta
+	var fingers = smoke.cigarette_point(skeleton)
+	if fingers != null:
+		cigarette.global_transform.origin = fingers
 
 
 func _update_label():
