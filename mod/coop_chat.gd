@@ -17,8 +17,19 @@ const MARGIN_BOTTOM = 24
 const MAX_LINES = 8
 const LINE_SECONDS = 12.0
 const MAX_LENGTH = 200
-const BACKDROP_PAD = 10            # насколько виньетка шире ленты
-const BACKDROP_ALPHA = 0.45
+const BACKDROP_ALPHA = 0.75        # у самого низа экрана
+const BACKDROP_TOP = 40            # виньетка начинается выше первой строки
+const BACKDROP_RIGHT = 80          # и выходит правее ленты, растворяясь
+# Чёрная виньетка: снизу плотная, вверх и вправо плавно уходит в прозрачность.
+const BACKDROP_SHADER = """
+shader_type canvas_item;
+uniform float strength = 0.75;
+void fragment() {
+	float up = smoothstep(0.0, 0.75, UV.y);
+	float side = 1.0 - smoothstep(0.55, 1.0, UV.x);
+	COLOR = vec4(0.0, 0.0, 0.0, COLOR.a * strength * up * side);
+}
+"""
 
 var regular
 var italic
@@ -38,9 +49,9 @@ func _ready():
 	regular = _font(FONT_REGULAR)
 	italic = _font(FONT_ITALIC)
 
-	backdrop = Panel.new()
+	backdrop = ColorRect.new()
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	backdrop.add_stylebox_override("panel", _backdrop_style())
+	backdrop.material = _backdrop_material()
 	backdrop.visible = false
 	add_child(backdrop)   # раньше ленты — рисуется под ней
 
@@ -83,14 +94,13 @@ func _font(path):
 	return f
 
 
-# Тёмная подложка со скруглением и размытой тенью того же цвета — края уходят в ноль.
-func _backdrop_style():
-	var s = StyleBoxFlat.new()
-	s.bg_color = Color(0, 0, 0, BACKDROP_ALPHA)
-	s.shadow_color = Color(0, 0, 0, BACKDROP_ALPHA)
-	s.shadow_size = 18
-	s.set_corner_radius_all(12)
-	return s
+func _backdrop_material():
+	var shader = Shader.new()
+	shader.code = BACKDROP_SHADER
+	var m = ShaderMaterial.new()
+	m.shader = shader
+	m.set_shader_param("strength", BACKDROP_ALPHA)
+	return m
 
 
 func _input_style():
@@ -211,8 +221,11 @@ func _refresh_fade():
 	backdrop.visible = box.visible and strongest > 0.0
 	if backdrop.visible:
 		backdrop.modulate.a = strongest
-		backdrop.rect_position = box.rect_position - Vector2(BACKDROP_PAD, BACKDROP_PAD)
-		backdrop.rect_size = box.rect_size + Vector2(BACKDROP_PAD, BACKDROP_PAD) * 2
+		# от левого и нижнего края экрана, чтобы снизу не было видно границы
+		var top = box.rect_position.y - BACKDROP_TOP
+		backdrop.rect_position = Vector2(0, top)
+		backdrop.rect_size = Vector2(box.rect_position.x + box.rect_size.x + BACKDROP_RIGHT,
+				box.get_viewport_rect().size.y - top)
 
 
 func _block_game_input():
