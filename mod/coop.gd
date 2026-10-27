@@ -20,6 +20,7 @@ const APP_ID = 2435180
 const MAX_MEMBERS = 4
 const LOBBY_FRIENDS_ONLY = 1
 const SEND_UNRELIABLE_NO_DELAY = 1
+const SEND_RELIABLE = 2           # события (радио включили, бутылка разбилась) терять нельзя
 const CHANNEL = 0
 const SEND_INTERVAL = 1.0 / 15.0
 const POLL_INTERVAL = 0.5
@@ -38,6 +39,7 @@ var Skins = load("user://mods/coop_skins.gd")
 var UI = load("user://mods/coop_ui.gd")
 var Car = load("user://mods/coop_car.gd")
 var Toast = load("user://mods/coop_toast.gd")
+var World = load("user://mods/coop_world.gd")
 
 var lobby_id = 0
 var my_id = 0
@@ -52,6 +54,7 @@ var pending_lobby = {}    # что записать в лобби, когда St
 var chat
 var car                   # своя машина: сесть, ехать, выйти
 var toast                 # уведомления сверху по центру
+var world                 # общий мир: предметы в руках, радио, свечи, дверь
 var menu_scene_id = 0     # instance_id текущей сцены меню
 var menu_frames = 0       # сколько кадров эта сцена меню уже живёт
 
@@ -59,6 +62,9 @@ var menu_frames = 0       # сколько кадров эта сцена мен
 func _ready():
 	pause_mode = Node.PAUSE_MODE_PROCESS
 	_load_settings()
+	world = World.new()
+	world.coop = self
+	add_child(world)
 	toast = Toast.new()
 	toast.coop = self
 	add_child(toast)
@@ -431,8 +437,13 @@ func _load_level(level):
 		return
 	loading_level = true
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	var loading = scene.get_node_or_null("MainMenuHUD/LoadingScreen") if scene else null
+	var hud = scene.get_node_or_null("MainMenuHUD") if scene else null
+	var menu = hud.get_node_or_null(MENU_NODE) if hud else null
+	if menu:
+		menu.hide()   # экран лобби добавлен в HUD последним и закрыл бы собой загрузку
+	var loading = hud.get_node_or_null("LoadingScreen") if hud else null
 	if loading:
+		loading.raise()
 		loading.show()
 	for _i in range(5):
 		yield(get_tree(), "idle_frame")
@@ -485,6 +496,7 @@ func _send_state():
 		"x": player.get_node("RotationHelper").rotation.x if player.has_node("RotationHelper") else 0.0,
 		"d": car.driving(),       # за рулём: у друзей вместо жителя — машина
 		"c": car.net_cars(),      # наши машины: поставленные по F1 и те, в которых ездили
+		"g": world.held_state(),  # предмет в руках (или только что брошенный)
 	}
 	var bytes = var2bytes(state)
 	for id in _members():
@@ -502,7 +514,10 @@ func _receive():
 		var state = bytes2var(packet["data"])
 		if typeof(state) != TYPE_DICTIONARY or state.get("v") != VERSION:
 			continue
-		_apply_state(packet["steam_id_remote"], state)
+		if state.get("t") == "ev":
+			_apply_event(state)
+		else:
+			_apply_state(packet["steam_id_remote"], state)
 
 
 func _apply_state(id, state):
@@ -522,6 +537,7 @@ func _apply_state(id, state):
 		state.get("d") == true)
 	avatar.push_cars(state.get("c", []), car)
 	var look = state.get("x", 0.0)
+	world.apply_held(id, state.get("g"), scene)
 	avatar.push_props(state.get("sm") == true, state.get("fl") == true,
 		look if typeof(look) == TYPE_REAL else 0.0)
 
@@ -537,7 +553,26 @@ func _on_own_lobby_changed():
 			avatars[id].set_name_color(color_of(id))
 
 
+# Надёжное событие всем в лобби: только для того же уровня, что у нас сейчас.
+func send_event(e):
+	if lobby_id == 0 or _in_main_menu():
+		return
+	var bytes = var2bytes({"v": VERSION, "t": "ev", "sc": get_tree().current_scene.filename, "e": e})
+	for id in _members():
+		if id != my_id:
+			Steam.sendP2PPacket(id, bytes, SEND_RELIABLE, CHANNEL)
+
+
+func _apply_event(packet):
+	var scene = get_tree().current_scene
+	if scene == null or packet.get("sc") != scene.filename or _in_main_menu():
+		return
+	world.apply_event(packet.get("e"), scene)
+
+
 func _remove_avatar(id):
+	if world:
+		world.forget(id)
 	var avatar = avatars.get(id)
 	if avatar != null and is_instance_valid(avatar):
 		avatar.queue_free()

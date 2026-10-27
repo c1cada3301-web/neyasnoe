@@ -3,6 +3,8 @@ extends VehicleBody
 # без столкновений (сквозь неё проезжают), которое плавно догоняет присланные положения.
 # Колёса крутим и поворачиваем сами: у неподвижного VehicleBody игра их не двигает.
 
+signal moved(delta)             # после каждого сдвига: камера пассажира ставится сразу за ней
+
 const FOLLOW_SPEED = 10.0
 const TELEPORT_DISTANCE = 8.0
 const DEFAULT_WHEEL_RADIUS = 0.35
@@ -60,6 +62,7 @@ func _process(delta):
 	var engine = _engine_audio()
 	if engine:
 		engine.pitch_scale = clamp(engine_pitch * (0.8 + abs(speed) / 25.0), 0.5, 2.5)
+	emit_signal("moved", delta)
 
 
 # Перед машины — +Z: при езде вперёд верх колеса уходит к +Z, это поворот вокруг +X.

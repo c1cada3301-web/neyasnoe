@@ -10,9 +10,11 @@ extends Node
 # F1 — поставить перед собой машину из игры (модель по кругу).
 # За рулём: N — следующий трек, L — предыдущий (музыка из машин игры, coop_radio.gd),
 # V — камера ближе/дальше.
+# Машина друга: E рядом с ней — сесть пассажиром (камера едет с ней, E — выйти).
 
 const HINT_ENTER = "нажмите [E], чтобы сесть"
 const HINT_EXIT = "[E] — выйти"
+const HINT_RIDE = "нажмите [E], чтобы сесть к другу"
 # Скрипты машин-автопилотов из городского трафика; у сюжетных (Bus1, Bus2, Car9) скрипты другие.
 const TRAFFIC_SCRIPTS = ["Car2", "Car2_2"]
 const ENGINE_FORCE = 1800.0
@@ -59,12 +61,13 @@ const SPAWN_PREFABS = [
 
 var Parked = load("user://mods/coop_parked.gd")
 var Radio = load("user://mods/coop_radio.gd")
-var Borders = load("user://mods/coop_borders.gd")
+const WORLD_BORDERS_BIT = 1     # слой невидимых стен уровня (WorldBorders)
 
 var coop                        # CoopMod: нужен, чтобы не ездить, пока открыт чат
 var parked = []                 # припаркованные машины текущей сцены
 var parked_scene_id = 0
 var car = null                  # VehicleBody, в которой сидим
+var riding = false              # car — машина друга (копия у нас), мы пассажир
 var player = null
 var camera = null
 var player_cam = null           # камера игрока, вернём её после поездки
@@ -100,6 +103,8 @@ func _input(event):
 			_spawn()
 		return
 	if driving() and event is InputEventKey and event.pressed and not event.echo and not _blocked():
+		if riding and event.physical_scancode in [NEXT_TRACK_KEY, LAST_TRACK_KEY]:
+			return   # музыку в своей машине выбирает друг
 		if event.physical_scancode == NEXT_TRACK_KEY:
 			_switch_track(1)
 			return
@@ -119,14 +124,23 @@ func _input(event):
 	else:
 		var target = _looked_at_car()
 		if target != null:
-			_enter(target)
+			_enter(target, target.has_meta("coop_ghost"))
 
 
-func _enter(target):
+func _enter(target, passenger = false):
 	player = _player()
 	player_cam = get_viewport().get_camera()
 	if player == null or player_cam == null or _view_of(player) == null:
 		player = null
+		return
+	riding = passenger
+	if passenger:
+		car = target
+		# копия машины друга двигается в своём _process; камеру ставим сразу после неё
+		car.connect("moved", self, "_on_ride_moved")
+		_mute_interact_fail()
+		_seat_player()
+		_start_camera()
 		return
 	if not (target is VehicleBody):
 		var path = str(get_tree().current_scene.get_path_to(target))
@@ -140,13 +154,21 @@ func _enter(target):
 		if touched.size() > TOUCHED_LIMIT:
 			touched.pop_front()
 	car = target
-	Borders.fence_in(car)   # невидимые стены по краю уровня, раздвинутые для машин
+	car.set_collision_mask_bit(WORLD_BORDERS_BIT, true)   # невидимые стены по краю уровня
 	safe_spots = []
 	safe_timer = 0.0
 	flipped_time = 0.0
 	car.set_physics_process(false)   # выключаем автопилот машины
 	_mute_interact_fail()
 	car.sleeping = false
+	var engine = _engine_audio()
+	engine_pitch = engine.pitch_scale if engine else 1.0
+	_seat_player()
+	_start_camera()
+
+
+# Игрок «пристёгивается»: стоит неподвижно, без столкновений, управление у машины.
+func _seat_player():
 	player_layer = player.collision_layer
 	player_mask = player.collision_mask
 	player_mode = player.mode
@@ -155,8 +177,9 @@ func _enter(target):
 	player.collision_mask = 0
 	player.mode = RigidBody.MODE_STATIC
 	_set_crosshair(false)
-	var engine = _engine_audio()
-	engine_pitch = engine.pitch_scale if engine else 1.0
+
+
+func _start_camera():
 	var length = _car_length()
 	cam_back = length * 1.2 + 1.0
 	cam_up = length * 0.35 + 1.0
@@ -176,8 +199,17 @@ func _enter(target):
 	camera.make_current()
 
 
+func _on_ride_moved(delta):
+	if not riding or not is_instance_valid(car) or not is_instance_valid(player):
+		return
+	player.global_transform.origin = car.global_transform.origin + Vector3.UP * SEAT_HEIGHT
+	_update_camera(delta)
+
+
 func _exit():
-	if is_instance_valid(car):
+	if riding and is_instance_valid(car) and car.is_connected("moved", self, "_on_ride_moved"):
+		car.disconnect("moved", self, "_on_ride_moved")
+	if is_instance_valid(car) and not riding:
 		car.engine_force = 0
 		car.steering = 0
 		car.brake = PARKED_BRAKE
@@ -186,6 +218,8 @@ func _exit():
 			engine.pitch_scale = engine_pitch
 	if is_instance_valid(player):
 		var side = car.global_transform.basis.x if is_instance_valid(car) else Vector3.RIGHT
+		if riding:
+			side = -side   # пассажир выходит с другой стороны
 		player.global_transform.origin += -side * EXIT_SIDE_GAP + Vector3.UP * 0.5
 		player.mode = player_mode
 		player.collision_layer = player_layer
@@ -199,6 +233,7 @@ func _exit():
 	if is_instance_valid(camera):
 		camera.queue_free()
 	car = null
+	riding = false
 	player = null
 	camera = null
 	player_cam = null
@@ -216,6 +251,7 @@ func _drop_if_gone():
 	if is_instance_valid(camera):
 		camera.queue_free()
 	car = null
+	riding = false
 	player = null
 	camera = null
 
@@ -280,7 +316,7 @@ func _notify(text):
 # ── езда ───────────────────────────────────────────────────────────────────
 func _physics_process(delta):
 	_drop_if_gone()
-	if not driving():
+	if not driving() or riding:
 		return
 	var throttle = 0.0
 	var steer = 0.0
@@ -373,13 +409,15 @@ func _update_hint():
 	var text = ""
 	if driving():
 		text = HINT_EXIT
-	elif not _blocked() and _looked_at_car() != null:
-		text = HINT_ENTER
+	elif not _blocked():
+		var target = _looked_at_car()
+		if target != null:
+			text = HINT_RIDE if target.has_meta("coop_ghost") else HINT_ENTER
 	if text != "":
 		label.text = text
 		hint_shown = true
 	elif hint_shown:
-		if label.text == HINT_ENTER or label.text == HINT_EXIT:
+		if label.text in [HINT_ENTER, HINT_EXIT, HINT_RIDE]:
 			label.text = ""
 		hint_shown = false
 
@@ -404,7 +442,38 @@ func _looked_at_car():
 	if view == null:
 		return null
 	var cam = view.global_transform
-	return Parked.looked_at(parked, cam.origin, -cam.basis.z)
+	var standing = Parked.looked_at(parked, cam.origin, -cam.basis.z)
+	return standing if standing != null else _looked_at_ghost(cam.origin, -cam.basis.z)
+
+
+# Машина друга без столкновений — луч игры её не видит; свой луч против габаритов кузова.
+func _looked_at_ghost(from, dir):
+	if coop == null or not ("avatars" in coop):
+		return null
+	var best = null
+	var best_t = 1.0
+	for avatar in coop.avatars.values():
+		if not is_instance_valid(avatar):
+			continue
+		for ghost in avatar.ghosts.values():
+			if not is_instance_valid(ghost) or not ghost.is_visible_in_tree():
+				continue
+			var body = _body_mesh_of(ghost)
+			if body == null:
+				continue
+			var to_local = body.global_transform.affine_inverse()
+			var t = Parked._segment_hits_box(to_local.xform(from), to_local.xform(from + dir * Parked.REACH), body.get_aabb())
+			if t >= 0 and t < best_t:
+				best = ghost
+				best_t = t
+	return best
+
+
+func _body_mesh_of(vehicle):
+	for child in vehicle.get_children():
+		if child is MeshInstance:
+			return child
+	return null
 
 
 # Наши машины (поставленные или собранные из припаркованных) — без скрипта; из игры — только трафик.
@@ -422,8 +491,6 @@ func _refresh_parked():
 		return
 	parked_scene_id = scene.get_instance_id()
 	parked = [] if coop._in_main_menu() else Parked.find_all(scene)
-	if not coop._in_main_menu():
-		Borders.build(scene)
 	spawned = []
 	touched = []
 
@@ -490,7 +557,7 @@ func _spawn():
 	get_tree().current_scene.add_child(new_car)
 	new_car.global_transform = Transform(Basis(Vector3.UP, atan2(forward.x, forward.z) + PI / 2), origin)
 	new_car.brake = PARKED_BRAKE
-	Borders.fence_in(new_car)
+	new_car.set_collision_mask_bit(WORLD_BORDERS_BIT, true)
 	spawn_serial += 1
 	_tag(new_car, "s%d" % spawn_serial, "prefab", prefab.resource_path.get_file().get_basename())
 	spawned.append(new_car)
