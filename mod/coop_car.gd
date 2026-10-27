@@ -34,6 +34,7 @@ const EXIT_SIDE_GAP = 1.6
 const DEFAULT_CAR_LENGTH = 4.5
 const CAM_LOOK_HEIGHT = 1.2
 const CAM_FOLLOW = 6.0          # чем больше, тем жёстче камера держится за машиной
+const CAM_LOOK_FOLLOW = 12.0
 const CAM_RECENTER_DELAY = 1.5
 const CAM_RECENTER_SPEED = 2.0
 const CAM_MAX_PITCH = 1.2
@@ -72,6 +73,7 @@ var cam_pitch = 0.0
 var cam_idle = 0.0
 var cam_back = 6.0
 var cam_up = 2.5
+var look_point = Vector3()
 var hint_shown = false
 var safe_spots = []             # [Transform] последние места, где машина уверенно стояла на дороге
 var safe_timer = 0.0
@@ -150,6 +152,7 @@ func _enter(target):
 	camera.doppler_tracking = player_cam.doppler_tracking
 	get_tree().current_scene.add_child(camera)
 	camera.global_transform = _camera_target()
+	look_point = car.global_transform.origin + Vector3.UP * CAM_LOOK_HEIGHT
 	camera.make_current()
 
 
@@ -279,12 +282,18 @@ func _physics_process(delta):
 		engine.pitch_scale = clamp(engine_pitch * (0.8 + speed / MAX_SPEED), 0.5, 2.5)
 	# игрок сидит в машине: так его видят друзья, и он не отстанет при выходе
 	player.global_transform.origin = car.global_transform.origin + Vector3.UP * SEAT_HEIGHT
+	_update_camera(delta)
 
 
-func _process(delta):
+func _process(_delta):
 	_refresh_parked()
 	_update_hint()
-	if not driving() or not is_instance_valid(camera) or not is_instance_valid(car):
+
+
+# Камера двигается в физическом шаге, вместе с машиной. В _process на кадр иногда приходится
+# 0 или 2 шага физики (60 Гц), и машина на экране дёргалась относительно камеры.
+func _update_camera(delta):
+	if not is_instance_valid(camera):
 		return
 	cam_idle += delta
 	if cam_idle > CAM_RECENTER_DELAY:
@@ -293,7 +302,10 @@ func _process(delta):
 	var target = _camera_target()
 	var t = min(1.0, CAM_FOLLOW * delta)
 	camera.global_transform.origin = camera.global_transform.origin.linear_interpolate(target.origin, t)
-	camera.look_at(car.global_transform.origin + Vector3.UP * CAM_LOOK_HEIGHT, Vector3.UP)
+	# точка взгляда тоже сглажена: подвеска качает кузов, и камера не трясётся вместе с ним
+	var look = car.global_transform.origin + Vector3.UP * CAM_LOOK_HEIGHT
+	look_point = look_point.linear_interpolate(look, min(1.0, CAM_LOOK_FOLLOW * delta))
+	camera.look_at(look_point, Vector3.UP)
 
 
 func _look(relative):
