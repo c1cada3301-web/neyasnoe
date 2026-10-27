@@ -13,6 +13,10 @@ const FOLLOW_SPEED = 12.0
 const NAME_HEIGHT = 2.0
 const NAME_FONT_SIZE = 13
 const TELEPORT_DISTANCE = 8.0
+# Ступни ставим на землю у нас: капсула игрока парит над полом (~0.09 м), а на склонах и
+# ступеньках присланная высота чуть врёт. Ищем землю в пределах GROUND_SNAP от присланной.
+const GROUND_SNAP = 0.6
+const GROUND_MASK = 1
 const MAX_CARS = 8              # больше машин от одного игрока не принимаем
 const PREFAB_DIR = "res://Prefabs/"
 const STORY_PREFABS = ["res://Prefabs/Car9.tscn"]
@@ -218,6 +222,8 @@ func _process(delta):
 		return
 	var k = clamp(delta * FOLLOW_SPEED, 0.0, 1.0)
 	global_transform.origin = global_transform.origin.linear_interpolate(target_pos, k)
+	if not driving_now:
+		_snap_to_ground()
 	rotation.y = lerp_angle(rotation.y, target_yaw, k)
 	if skin:
 		if speed > WALK_THRESHOLD:
@@ -243,6 +249,15 @@ func _animate_smoking(delta):
 	var fingers = smoke.cigarette_point(skeleton)
 	if fingers != null:
 		cigarette.global_transform.origin = fingers
+
+
+func _snap_to_ground():
+	var origin = global_transform.origin
+	var space = get_world().direct_space_state
+	var hit = space.intersect_ray(origin + Vector3.UP * GROUND_SNAP, origin - Vector3.UP * GROUND_SNAP,
+		[], GROUND_MASK)
+	if hit:
+		global_transform.origin.y = hit.position.y
 
 
 func _update_label():
