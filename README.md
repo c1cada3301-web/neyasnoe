@@ -2,7 +2,7 @@
 
 ![Меню «игра с друзьями»: персонаж, глава, лобби и чат в игре](media/demo.gif)
 
-[Полное видео (mp4)](../../releases/download/v0.3/neyasnoe-coop-demo.mp4)
+[Полное видео (mp4)](https://github.com/c1cada3301-web/neyasnoe/releases/download/v0.3/neyasnoe-coop-demo.mp4)
 
 Фанатский мод для [«Неясного»](https://store.steampowered.com/search/?term=Неясное): совместная игра с друзьями через Steam и чат. Файлы игры не меняются — мод подключается рядом с игрой и удаляется одним файлом.
 
