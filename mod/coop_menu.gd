@@ -198,15 +198,15 @@ func _build_character():
 	var prev = UI.button("<", Vector2(X, TOP), 24)
 	prev.connect("pressed", self, "_change_skin", [-1])
 	p.add_child(prev)
-	skin_label = UI.label("", Vector2(X + 28, TOP), Vector2(280, UI.BUTTON_H))
-	skin_label.align = Label.ALIGN_CENTER
+	# селектор выровнен по левому краю, как пункты меню: «<» имя «>»
+	var name_x = X + prev.rect_size.x + ARROW_GAP
+	skin_label = UI.label("", Vector2(name_x, TOP), Vector2(280, UI.BUTTON_H))
 	skin_label.autowrap = false
 	p.add_child(skin_label)
-	var next = UI.button(">", Vector2(X + 312, TOP), 24)
+	var next = UI.button(">", Vector2(name_x, TOP), 24)
 	next.connect("pressed", self, "_change_skin", [1])
 	p.add_child(next)
-	skin_count = UI.label("", Vector2(X + 28, TOP + 26), Vector2(280, 20), 0.5, small)
-	skin_count.align = Label.ALIGN_CENTER
+	skin_count = UI.label("", Vector2(name_x, TOP + 26), Vector2(280, 20), 0.5, small)
 	p.add_child(skin_count)
 	var ok = _add_button(p, "next", TOP + ROW * 2, "_on_character_done")
 	var back = _add_button(p, "back", TOP + ROW * 3, "_on_character_back")
@@ -406,11 +406,9 @@ func _change_skin(step):
 func _refresh_skin():
 	skin_label.text = Skins.title(coop.skin)
 	skin_count.text = _t("skin_of") % [Skins.index_of(coop.skin) + 1, Skins.count()]
-	# стрелки прижимаются к имени, а не стоят по краям колонки
-	var half = skin_label.get_font("font").get_string_size(skin_label.text).x / 2
-	var center = skin_label.rect_position.x + skin_label.rect_size.x / 2
-	char_buttons[0].rect_position.x = max(X, center - half - ARROW_GAP - char_buttons[0].rect_size.x)
-	char_buttons[1].rect_position.x = center + half + ARROW_GAP
+	# «>» идёт сразу за именем
+	var width = skin_label.get_font("font").get_string_size(skin_label.text).x
+	char_buttons[1].rect_position.x = skin_label.rect_position.x + width + ARROW_GAP
 
 
 func _on_character_done():
