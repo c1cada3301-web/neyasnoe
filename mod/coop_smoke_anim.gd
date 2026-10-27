@@ -18,6 +18,8 @@ const ANIMATION = "PlayerSmoking1"
 const ARM_PARTS = ["LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand"]
 const CHEST = "Spine2"
 const CIGARETTE_BONE = "LeftHandIndex2"
+const LIGHTER_BONE = "LeftHandThumb2"
+const LIGHTER_SHOWN = [0.3, 3.0]   # зажигалка в руке, пока прикуривают
 # Расстояние кисть—голова в длинах предплечья: 0.84 — у рта, 2.97 — рука опущена.
 const NEAR_RATIO = 1.2
 const FAR_RATIO = 2.6
@@ -50,6 +52,7 @@ var hand_bone = -1
 var head_bone = -1
 var fore_bone = -1
 var cigarette_bone = -1
+var lighter_bone = -1
 
 
 # owner — узел, под которым живёт копия рук (аватар); skel — скелет скина.
@@ -92,6 +95,7 @@ func setup(owner, skel, mouth_height):
 	head_bone = hands_skel.find_bone("mixamorigHead")
 	fore_bone = hands_skel.find_bone("mixamorigLeftForeArm")
 	cigarette_bone = _skin_bone(skel, CIGARETTE_BONE)
+	lighter_bone = _skin_bone(skel, LIGHTER_BONE)
 	return not pairs.empty() and hand_bone >= 0 and head_bone >= 0 and fore_bone >= 0
 
 
@@ -165,6 +169,13 @@ static func ember(t):
 		if t >= step[0]:
 			energy = step[1]
 	return energy
+
+
+# Где зажигалка в момент t (у большого пальца), или null, если её сейчас не видно.
+func lighter_point(skel, t):
+	if lighter_bone < 0 or t < LIGHTER_SHOWN[0] or t >= LIGHTER_SHOWN[1]:
+		return null
+	return skel.global_transform.xform(skel.get_bone_global_pose(lighter_bone).origin)
 
 
 # Где сейчас пальцы с сигаретой у скина (глобально); null, если такой кости нет.

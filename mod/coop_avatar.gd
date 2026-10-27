@@ -42,6 +42,7 @@ var smoke                       # анимация курения с рук иг
 var smoke_time = 0.0
 var skeleton
 var mouth_spot = Vector3()      # где сигарета, пока рука не у рта
+var lighter
 
 
 func _ready():
@@ -66,6 +67,8 @@ func _ready():
 	add_child(layer)
 	flashlight = Props.flashlight()
 	add_child(flashlight)
+	lighter = Props.lighter()
+	add_child(lighter)
 	visible = false
 
 
@@ -242,6 +245,7 @@ func _animate_smoking(delta):
 		return
 	var animating = smoke != null and smoking and not driving_now and smoke_time < smoke.length
 	if not animating:
+		lighter.visible = false
 		cigarette.translation = mouth_spot
 		if smoke:
 			smoke.effects(-1.0)
@@ -250,6 +254,10 @@ func _animate_smoking(delta):
 	smoke.apply(skeleton, smoke_time)
 	Props.set_ember(cigarette, smoke.ember(smoke_time))
 	smoke_time += delta
+	var thumb = smoke.lighter_point(skeleton, smoke_time)
+	lighter.visible = thumb != null
+	if thumb != null:
+		lighter.global_transform = Transform(global_transform.basis, thumb)
 	var fingers = smoke.cigarette_point(skeleton)
 	if fingers != null:
 		cigarette.global_transform.origin = fingers

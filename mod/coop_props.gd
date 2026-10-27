@@ -11,6 +11,10 @@ const DEFAULT_MOUTH_HEIGHT = 1.62
 const CIGARETTE_LENGTH = 0.08
 const CIGARETTE_RADIUS = 0.005
 const EMBER_IDLE = 1.0
+const SMOKE_TEXTURE = "res://Assets/Textures/SmokeParticle2.png"   # дым выдоха игрока
+# Зажигалка: в игре она часть меша рук, отдельной модели нет — собираем коробочку сами.
+const LIGHTER_SIZE = Vector3(0.022, 0.06, 0.012)
+const LIGHTER_COLOR = Color(0.55, 0.08, 0.06)
 const EMBER_SCALE = 1.2
 const FLASHLIGHT_HEIGHT = 1.6
 # Как у фонарика игрока (Player.tscn → RotationHelper/Flashlight), но без теней:
@@ -85,9 +89,14 @@ static func _cigarette():
 	smoke.gravity = Vector3(0, 0.15, 0)
 	smoke.initial_velocity = 0.12
 	smoke.scale_amount = 0.6
+	smoke.scale_amount_random = 0.4
+	smoke.angle_random = 1.0
+	smoke.angular_velocity = 20.0
+	smoke.angular_velocity_random = 1.0
 	var puff = QuadMesh.new()
-	puff.size = Vector2(0.03, 0.03)
+	puff.size = Vector2(0.06, 0.06)
 	var haze = SpatialMaterial.new()
+	haze.albedo_texture = load(SMOKE_TEXTURE)   # мягкий клуб из игры, а не квадратик
 	haze.flags_transparent = true
 	haze.flags_unshaded = true
 	haze.params_billboard_mode = SpatialMaterial.BILLBOARD_PARTICLES
@@ -118,6 +127,20 @@ static func flashlight():
 	light.translation = Vector3(0, FLASHLIGHT_HEIGHT, 0)
 	light.visible = false
 	return light
+
+
+static func lighter():
+	var body = MeshInstance.new()
+	body.name = "CoopLighter"
+	var box = CubeMesh.new()
+	box.size = LIGHTER_SIZE
+	body.mesh = box
+	var plastic = SpatialMaterial.new()
+	plastic.albedo_color = LIGHTER_COLOR
+	plastic.roughness = 0.4
+	body.material_override = plastic
+	body.visible = false
+	return body
 
 
 # Кончик сигареты: 0 — не горит, 1 — тлеет, 5 — затяжка (как у сигареты в руках игрока).
