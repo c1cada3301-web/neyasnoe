@@ -18,6 +18,7 @@ const INSERT_Y = 315               # пункт меню после «обуче
 const SHIFTED = ["SettingsButton", "CreditsButton", "QuitButton"]
 const PREVIEW_RECT = Rect2(600, 70, 300, 420)
 const PREVIEW_SPIN = 0.5           # рад/с
+const ARROW_GAP = 10               # от имени скина до стрелок «<» «>»
 const CARDS_RECT = Rect2(430, 120, 480, 186)
 const CHAT_RECT = Rect2(430, 316, 480, 150)
 const CARD_H = 40
@@ -405,6 +406,11 @@ func _change_skin(step):
 func _refresh_skin():
 	skin_label.text = Skins.title(coop.skin)
 	skin_count.text = _t("skin_of") % [Skins.index_of(coop.skin) + 1, Skins.count()]
+	# стрелки прижимаются к имени, а не стоят по краям колонки
+	var half = skin_label.get_font("font").get_string_size(skin_label.text).x / 2
+	var center = skin_label.rect_position.x + skin_label.rect_size.x / 2
+	char_buttons[0].rect_position.x = max(X, center - half - ARROW_GAP - char_buttons[0].rect_size.x)
+	char_buttons[1].rect_position.x = center + half + ARROW_GAP
 
 
 func _on_character_done():
