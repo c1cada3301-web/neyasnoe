@@ -36,6 +36,8 @@ var Chat = load("user://mods/coop_chat.gd")
 var Menu = load("user://mods/coop_menu.gd")
 var Skins = load("user://mods/coop_skins.gd")
 var UI = load("user://mods/coop_ui.gd")
+var Car = load("user://mods/coop_car.gd")
+var Toast = load("user://mods/coop_toast.gd")
 
 var lobby_id = 0
 var my_id = 0
@@ -48,6 +50,8 @@ var poll_timer = 0.0
 var last_snapshot = ""    # чтобы слать lobby_changed только при изменениях
 var pending_lobby = {}    # что записать в лобби, когда Steam его создаст
 var chat
+var car                   # своя машина: сесть, ехать, выйти
+var toast                 # уведомления сверху по центру
 var menu_scene_id = 0     # instance_id текущей сцены меню
 var menu_frames = 0       # сколько кадров эта сцена меню уже живёт
 
@@ -55,6 +59,13 @@ var menu_frames = 0       # сколько кадров эта сцена мен
 func _ready():
 	pause_mode = Node.PAUSE_MODE_PROCESS
 	_load_settings()
+	toast = Toast.new()
+	toast.coop = self
+	add_child(toast)
+	car = Car.new()
+	car.coop = self
+	car.pause_mode = Node.PAUSE_MODE_STOP   # на паузе машина не едет
+	add_child(car)   # машины работают и без Steam
 	if not Engine.has_singleton("Steam"):
 		push_warning("CoopMod: нет Steam — мод выключен")
 		set_process_input(false)
@@ -275,17 +286,26 @@ func _input(event):
 	if event.scancode == KEY_F9:
 		if lobby_id != 0:
 			open_steam_invites()
+			notify("приглашение друзей")
 		else:
+			notify("создаю лобби…")
 			var scene = get_tree().current_scene
 			var n = scene.filename.get_file().get_basename().replace("Level", "")
 			create_lobby(scene.filename, n if n.is_valid_integer() else "")
 			pending_lobby["started"] = "1"   # мы уже на уровне: друзья сразу загрузят его
 	elif event.scancode == KEY_F10:
+		if lobby_id != 0:
+			notify("вы вышли из лобби")
 		leave()
 	elif event.scancode == KEY_ENTER or event.scancode == KEY_KP_ENTER:
 		if not chat.is_open():
 			chat.open()
 			get_tree().set_input_as_handled()
+
+
+func notify(text):
+	if toast:
+		toast.show_text(text)
 
 
 # ── сигналы Steam ───────────────────────────────────────────────────────────
