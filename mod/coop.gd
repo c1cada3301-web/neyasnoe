@@ -13,6 +13,7 @@ extends Node
 
 signal lobby_changed
 signal chat_event(author, text, is_system)
+signal chat_cleared
 
 const VERSION = 3
 const APP_ID = 2435180
@@ -148,6 +149,7 @@ func _friend_order(a, b):
 func create_lobby(level, chapter_n):
 	if lobby_id != 0:
 		leave()
+	_clear_chat()
 	pending_lobby = {"level": level, "chapter": str(chapter_n), "started": "0"}
 	_system("Создаю лобби…")
 	Steam.createLobby(LOBBY_FRIENDS_ONLY, MAX_MEMBERS)
@@ -168,6 +170,7 @@ func join(id):
 		return
 	if lobby_id != 0:
 		leave()
+	_clear_chat()
 	_system("Подключаюсь к лобби…")
 	Steam.joinLobby(id)
 
@@ -224,6 +227,12 @@ func _load_settings():
 	skin = Skins.DEFAULT
 	if cfg.load(SETTINGS_PATH) == OK:
 		skin = Skins.id_at(Skins.index_of(cfg.get_value("coop", "skin", Skins.DEFAULT)))
+
+
+# Новое лобби — чистая лента: переписка прошлого лобби к нему не относится.
+func _clear_chat():
+	chat.clear()
+	emit_signal("chat_cleared")
 
 
 func _system(text):

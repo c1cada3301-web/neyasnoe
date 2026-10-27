@@ -116,6 +116,12 @@ func close():
 	_restore_game_input()
 
 
+func clear():
+	for line in lines:
+		line["label"].queue_free()
+	lines.clear()
+
+
 func message(author, text):
 	var label = _add_line()
 	_italic(label, author, ACCENT)

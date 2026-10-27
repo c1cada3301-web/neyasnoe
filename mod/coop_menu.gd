@@ -119,6 +119,7 @@ func _ready():
 	_build_screen()
 	coop.connect("lobby_changed", self, "_on_lobby_changed")
 	coop.connect("chat_event", self, "_on_chat_event")
+	coop.connect("chat_cleared", self, "_on_chat_cleared")
 	if coop.in_lobby():
 		call_deferred("_open_screen")
 
@@ -647,6 +648,12 @@ func _on_chat_event(author, text, is_system):
 	chat_lines.append(l)
 	while chat_lines.size() > CHAT_LINES:
 		chat_lines.pop_front().queue_free()
+
+
+func _on_chat_cleared():
+	for l in chat_lines:
+		l.queue_free()
+	chat_lines.clear()
 
 
 # ── присоединиться ──────────────────────────────────────────────────────────
