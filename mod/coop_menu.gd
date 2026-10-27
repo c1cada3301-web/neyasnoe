@@ -562,6 +562,7 @@ func _card(m):
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var name = m["name"] + ("  (" + _t("you") + ")" if m["me"] else "")
 	var n = UI.label(name, Vector2(0, 0), Vector2(300, 22))
+	n.add_color_override("font_color", m["color"])
 	n.autowrap = false
 	n.clip_text = true
 	row.add_child(n)
@@ -624,7 +625,7 @@ func _on_chat_entered(text):
 		coop.send_chat(text)
 
 
-func _on_chat_event(author, text, is_system):
+func _on_chat_event(author, text, is_system, color):
 	var l = RichTextLabel.new()
 	l.fit_content_height = true
 	l.scroll_active = false
@@ -639,7 +640,7 @@ func _on_chat_event(author, text, is_system):
 		l.pop()
 	else:
 		l.push_font(italic)
-		l.push_color(UI.ACCENT)
+		l.push_color(color)
 		l.add_text(author)
 		l.pop()
 		l.pop()

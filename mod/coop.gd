@@ -12,7 +12,7 @@ extends Node
 #   участник:  skin, ready = "1"
 
 signal lobby_changed
-signal chat_event(author, text, is_system)
+signal chat_event(author, text, is_system, color)
 signal chat_cleared
 
 const VERSION = 3
@@ -35,6 +35,7 @@ var Avatar = load("user://mods/coop_avatar.gd")
 var Chat = load("user://mods/coop_chat.gd")
 var Menu = load("user://mods/coop_menu.gd")
 var Skins = load("user://mods/coop_skins.gd")
+var UI = load("user://mods/coop_ui.gd")
 
 var lobby_id = 0
 var my_id = 0
@@ -72,6 +73,7 @@ func _ready():
 	chat = Chat.new()
 	chat.connect("submitted", self, "send_chat")
 	add_child(chat)
+	connect("lobby_changed", self, "_on_own_lobby_changed")
 	print("CoopMod v%d: ready" % VERSION)
 	call_deferred("_join_from_cmdline")
 
@@ -116,8 +118,32 @@ func members():
 			"ready": Steam.getLobbyMemberData(lobby_id, id, "ready") == "1",
 			"host": id == owner,
 			"me": id == my_id,
+			"color": color_of(id),
 		})
 	return out
+
+
+# Цвет ника. Каждый хочет «свой» цвет по хешу Steam ID; при совпадении в лобби
+# следующий свободный. Участники перебираются по возрастанию ID — у всех одинаково.
+func color_of(id):
+	var count = UI.PLAYER_COLORS.size()
+	var ids = _members()
+	ids.sort()
+	var taken = {}
+	for member in ids:
+		var slot = _preferred_color(member)
+		for i in count:
+			if not taken.has(slot):
+				break
+			slot = (slot + 1) % count
+		taken[slot] = true
+		if member == id:
+			return UI.PLAYER_COLORS[slot]
+	return UI.PLAYER_COLORS[_preferred_color(id)]   # уже не в лобби
+
+
+func _preferred_color(id):
+	return abs(hash(str(id))) % UI.PLAYER_COLORS.size()
 
 
 # Друзья для окна приглашений: сначала те, кто в «Неясном», потом в сети; офлайн — в конце.
@@ -237,7 +263,7 @@ func _clear_chat():
 
 func _system(text):
 	chat.system(text)
-	emit_signal("chat_event", "", text, true)
+	emit_signal("chat_event", "", text, true, null)
 
 
 # ── клавиши ─────────────────────────────────────────────────────────────────
@@ -328,8 +354,9 @@ func _on_lobby_chat_update(id, changed_id, _making_change_id, chat_state):
 func _on_lobby_message(id, user, message, _chat_type):
 	if id == lobby_id:
 		var author = Steam.getFriendPersonaName(user)
-		chat.message(author, message)
-		emit_signal("chat_event", author, message, false)
+		var color = color_of(user)
+		chat.message(author, message, color)
+		emit_signal("chat_event", author, message, false, color)
 
 
 func _on_p2p_session_request(remote_id):
@@ -463,9 +490,21 @@ func _apply_state(id, state):
 		avatar = Avatar.new()
 		avatar.name = "CoopRemote_%s" % str(id)   # не «Player»: игра ищет find_node("Player")
 		avatar.display_name = Steam.getFriendPersonaName(id)
+		avatar.name_color = color_of(id)
 		scene.add_child(avatar)
 		avatars[id] = avatar
 	avatar.push_state(state["p"], state["y"], state.get("s", 0.0), state.get("k", Skins.DEFAULT))
+
+
+# Состав лобби изменился: список онлайн слева сверху и цвета имён над головами.
+func _on_own_lobby_changed():
+	var roster = []
+	for m in members():
+		roster.append({"name": m["name"], "color": m["color"]})
+	chat.set_roster(roster)
+	for id in avatars:
+		if is_instance_valid(avatars[id]):
+			avatars[id].set_name_color(color_of(id))
 
 
 func _remove_avatar(id):

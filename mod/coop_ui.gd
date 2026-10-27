@@ -7,6 +7,17 @@ const ITALIC = "res://Assets/Fonts/OldStandardItalic.tres"
 const BUTTON_H = 25
 const DIM = Color(0, 0, 0, 0.627451)     # как у экрана выбора главы
 const ACCENT = Color("#69b2ff")          # голубой из темы игры
+# Цвета ников: приглушённые, чтобы не спорить с мрачной картинкой игры.
+const PLAYER_COLORS = [
+	Color("#69b2ff"),   # голубой
+	Color("#ff8fc7"),   # розовый
+	Color("#ff6b6b"),   # красный
+	Color("#ffa94d"),   # оранжевый
+	Color("#ffd866"),   # жёлтый
+	Color("#8fd694"),   # зелёный
+	Color("#5fd3c8"),   # бирюзовый
+	Color("#b69cff"),   # сиреневый
+]
 
 
 static func font(path, size):

@@ -11,6 +11,7 @@ const NAME_FONT_SIZE = 13
 const TELEPORT_DISTANCE = 8.0
 
 var display_name = ""
+var name_color = Color(1, 1, 1)
 var skin_id = ""
 var skin
 var target_pos = Vector3()
@@ -32,7 +33,7 @@ func _ready():
 		label.add_font_override("font", font)
 	label.text = display_name
 	label.align = Label.ALIGN_CENTER
-	label.add_color_override("font_color", Color(1, 1, 1))
+	label.add_color_override("font_color", name_color)
 	label.add_color_override("font_color_shadow", Color(0, 0, 0, 1))
 	label.add_constant_override("shadow_offset_x", 1)
 	label.add_constant_override("shadow_offset_y", 1)
@@ -41,6 +42,12 @@ func _ready():
 	layer.add_child(label)
 	add_child(layer)
 	visible = false
+
+
+func set_name_color(color):
+	name_color = color
+	if label:
+		label.add_color_override("font_color", color)
 
 
 func set_skin(id):

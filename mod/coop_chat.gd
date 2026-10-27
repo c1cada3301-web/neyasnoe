@@ -17,6 +17,7 @@ const MARGIN_BOTTOM = 24
 const MAX_LINES = 8
 const LINE_SECONDS = 12.0
 const MAX_LENGTH = 200
+const ROSTER_MARGIN = 24           # список онлайн в левом верхнем углу
 const BACKDROP_ALPHA = 0.75        # у самого низа экрана
 const BACKDROP_TOP = 40            # виньетка начинается выше первой строки
 const BACKDROP_RIGHT = 80          # и выходит правее ленты, растворяясь
@@ -34,6 +35,7 @@ void fragment() {
 var regular
 var italic
 var box
+var roster                # список игроков лобби: цветные ники без подложки
 var backdrop              # мягкое затемнение под лентой, чтобы текст читался на любом фоне
 var input
 var lines = []            # [{label, time}]
@@ -54,6 +56,12 @@ func _ready():
 	backdrop.material = _backdrop_material()
 	backdrop.visible = false
 	add_child(backdrop)   # раньше ленты — рисуется под ней
+
+	roster = VBoxContainer.new()
+	roster.rect_position = Vector2(ROSTER_MARGIN, ROSTER_MARGIN)
+	roster.add_constant_override("separation", 0)
+	roster.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(roster)
 
 	box = VBoxContainer.new()
 	# привязка к низу экрана: новые строки добавляют высоту вверх
@@ -119,6 +127,7 @@ func _input_style():
 func set_hidden(value):
 	if box.visible == value:
 		box.visible = not value
+		roster.visible = not value
 	if value and is_open():
 		close()
 
@@ -151,9 +160,26 @@ func clear():
 	lines.clear()
 
 
-func message(author, text):
+# players: [{name, color}]; пустой список — не в лобби, прячем.
+func set_roster(players):
+	for child in roster.get_children():
+		child.queue_free()
+	for p in players:
+		var l = Label.new()
+		l.text = p["name"]
+		if italic:
+			l.add_font_override("font", italic)
+		l.add_color_override("font_color", p["color"])
+		l.add_color_override("font_color_shadow", Color(0, 0, 0, 1))
+		l.add_constant_override("shadow_offset_x", 1)
+		l.add_constant_override("shadow_offset_y", 1)
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		roster.add_child(l)
+
+
+func message(author, text, color = ACCENT):
 	var label = _add_line()
-	_italic(label, author, ACCENT)
+	_italic(label, author, color)
 	label.add_text("  " + text)   # add_text не разбирает BBCode — скобки в сообщении безопасны
 
 
