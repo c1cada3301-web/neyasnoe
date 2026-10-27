@@ -17,10 +17,13 @@ const MARGIN_BOTTOM = 24
 const MAX_LINES = 8
 const LINE_SECONDS = 12.0
 const MAX_LENGTH = 200
+const BACKDROP_PAD = 10            # насколько виньетка шире ленты
+const BACKDROP_ALPHA = 0.45
 
 var regular
 var italic
 var box
+var backdrop              # мягкое затемнение под лентой, чтобы текст читался на любом фоне
 var input
 var lines = []            # [{label, time}]
 var saved_actions = {}    # action → [InputEvent]
@@ -34,6 +37,12 @@ func _init():
 func _ready():
 	regular = _font(FONT_REGULAR)
 	italic = _font(FONT_ITALIC)
+
+	backdrop = Panel.new()
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	backdrop.add_stylebox_override("panel", _backdrop_style())
+	backdrop.visible = false
+	add_child(backdrop)   # раньше ленты — рисуется под ней
 
 	box = VBoxContainer.new()
 	# привязка к низу экрана: новые строки добавляют высоту вверх
@@ -72,6 +81,16 @@ func _font(path):
 	var f = base.duplicate()
 	f.size = FONT_SIZE
 	return f
+
+
+# Тёмная подложка со скруглением и размытой тенью того же цвета — края уходят в ноль.
+func _backdrop_style():
+	var s = StyleBoxFlat.new()
+	s.bg_color = Color(0, 0, 0, BACKDROP_ALPHA)
+	s.shadow_color = Color(0, 0, 0, BACKDROP_ALPHA)
+	s.shadow_size = 18
+	s.set_corner_radius_all(12)
+	return s
 
 
 func _input_style():
@@ -182,10 +201,18 @@ func _process(_delta):
 # Старые строки гаснут; при открытом чате видны все.
 func _refresh_fade():
 	var now = OS.get_ticks_msec() / 1000.0
+	var strongest = 1.0 if is_open() else 0.0
 	for line in lines:
 		var age = now - line["time"]
 		var alpha = 1.0 if is_open() else clamp(LINE_SECONDS - age, 0.0, 1.0)
 		line["label"].modulate.a = alpha
+		strongest = max(strongest, alpha)
+	# виньетка гаснет вместе с последней видимой строкой
+	backdrop.visible = box.visible and strongest > 0.0
+	if backdrop.visible:
+		backdrop.modulate.a = strongest
+		backdrop.rect_position = box.rect_position - Vector2(BACKDROP_PAD, BACKDROP_PAD)
+		backdrop.rect_size = box.rect_size + Vector2(BACKDROP_PAD, BACKDROP_PAD) * 2
 
 
 func _block_game_input():
