@@ -3,12 +3,16 @@ extends Spatial
 # плавно догоняет присланные позиции. Над головой — имя из Steam.
 
 var Skins = load("user://mods/coop_skins.gd")
+var Ghost = load("user://mods/coop_ghost_car.gd")
 
 const WALK_THRESHOLD = 0.5
 const FOLLOW_SPEED = 12.0
 const NAME_HEIGHT = 2.0
 const NAME_FONT_SIZE = 13
 const TELEPORT_DISTANCE = 8.0
+const MAX_CARS = 8              # больше машин от одного игрока не принимаем
+const PREFAB_DIR = "res://Prefabs/"
+const STORY_PREFABS = ["res://Prefabs/Car9.tscn"]
 
 var display_name = ""
 var name_color = Color(1, 1, 1)
@@ -19,6 +23,8 @@ var target_yaw = 0.0
 var speed = 0.0
 var has_state = false
 var label
+var ghosts = {}                 # id машины друга → её копия у нас
+var failed = {}                 # id, которые не удалось собрать: не пробуем каждый пакет
 
 
 func _ready():
@@ -65,8 +71,10 @@ func set_skin(id):
 	Skins.play_idle(skin, 0.0)
 
 
-func push_state(pos, yaw, move_speed, id):
+func push_state(pos, yaw, move_speed, id, driving = false):
 	set_skin(id)
+	if skin:
+		skin["node"].visible = not driving   # за рулём видна машина, над ней — имя
 	target_pos = pos
 	target_yaw = yaw
 	speed = move_speed
@@ -75,6 +83,81 @@ func push_state(pos, yaw, move_speed, id):
 		rotation.y = yaw
 	has_state = true
 	visible = true
+
+
+# ── машины друга ───────────────────────────────────────────────────────────
+# cars приходят по сети: каждую запись проверяем, модель берём только из машин игры.
+func push_cars(cars, local_cars):
+	if typeof(cars) != TYPE_ARRAY:
+		cars = []
+	var seen = {}
+	for n in range(min(cars.size(), MAX_CARS)):
+		var c = cars[n]
+		if not _valid_car(c):
+			continue
+		var id = c["i"]
+		seen[id] = true
+		var ghost = ghosts.get(id)
+		if (ghost == null or not is_instance_valid(ghost)) and not failed.has(id):
+			ghost = _build_ghost(c, local_cars)
+			if ghost == null:
+				failed[id] = true
+				continue
+			ghosts[id] = ghost
+		if ghost != null and is_instance_valid(ghost):
+			ghost.push(c["p"], c["q"], clamp(c["w"], -1.0, 1.0), c["v"])
+	for id in ghosts.keys():
+		if not seen.has(id):
+			if is_instance_valid(ghosts[id]):
+				ghosts[id].queue_free()
+			ghosts.erase(id)
+
+
+func _valid_car(c):
+	if typeof(c) != TYPE_DICTIONARY:
+		return false
+	return typeof(c.get("i")) == TYPE_STRING and typeof(c.get("k")) == TYPE_STRING \
+		and typeof(c.get("r")) == TYPE_STRING and typeof(c.get("p")) == TYPE_VECTOR3 \
+		and typeof(c.get("q")) == TYPE_QUAT and typeof(c.get("w")) == TYPE_REAL \
+		and typeof(c.get("v")) == TYPE_REAL
+
+
+func _build_ghost(c, local_cars):
+	var scene = get_tree().current_scene
+	var vehicle = null
+	if c["k"] == "prefab":
+		var ref = c["r"]   # имя сцены машины, например Car5_2
+		if not ref.begins_with("Car") or not ref.substr(3).replace("_", "").is_valid_integer():
+			return null
+		var path = PREFAB_DIR + ref + ".tscn"
+		if path in STORY_PREFABS:
+			return null
+		var prefab = load(path)
+		if not (prefab is PackedScene):
+			return null
+		vehicle = prefab.instance()
+		if not (vehicle is VehicleBody):
+			vehicle.free()
+			return null
+		vehicle.set_script(Ghost)
+		scene.add_child(vehicle)
+	elif c["k"] == "parked" and local_cars:
+		var root = local_cars.claim_parked(c["r"])   # у нас эта модель уходит со своего места
+		if root == null:
+			return null
+		vehicle = local_cars.Parked.make_drivable(root)
+		vehicle.set_script(Ghost)
+	else:
+		return null
+	vehicle.setup()
+	return vehicle
+
+
+func _exit_tree():
+	for id in ghosts:
+		if is_instance_valid(ghosts[id]):
+			ghosts[id].queue_free()
+	ghosts = {}
 
 
 func _process(delta):

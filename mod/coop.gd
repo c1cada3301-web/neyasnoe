@@ -480,6 +480,8 @@ func _send_state():
 		"y": player.global_transform.basis.get_euler().y,
 		"s": player.linear_velocity.length(),
 		"k": skin,
+		"d": car.driving(),       # за рулём: у друзей вместо жителя — машина
+		"c": car.net_cars(),      # наши машины: поставленные по F1 и те, в которых ездили
 	}
 	var bytes = var2bytes(state)
 	for id in _members():
@@ -513,7 +515,9 @@ func _apply_state(id, state):
 		avatar.name_color = color_of(id)
 		scene.add_child(avatar)
 		avatars[id] = avatar
-	avatar.push_state(state["p"], state["y"], state.get("s", 0.0), state.get("k", Skins.DEFAULT))
+	avatar.push_state(state["p"], state["y"], state.get("s", 0.0), state.get("k", Skins.DEFAULT),
+		state.get("d") == true)
+	avatar.push_cars(state.get("c", []), car)
 
 
 # Состав лобби изменился: список онлайн слева сверху и цвета имён над головами.

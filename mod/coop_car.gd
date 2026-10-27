@@ -41,6 +41,8 @@ const SPAWN_KEY = KEY_F1           # F2–F8 и F11 заняты игрой, F12
 const SPAWN_DISTANCE = 5.0
 const SPAWN_LIMIT = 3           # больше — самая старая поставленная машина исчезает
 const PARKED_BRAKE = 5.0
+const TOUCHED_LIMIT = 3
+const NET_CARS_LIMIT = 4
 # Машины-автопилоты из игры; при постановке их скрипт снимаем, остаётся модель с физикой.
 const SPAWN_PREFABS = [
 	"res://Prefabs/Car2.tscn", "res://Prefabs/Car3.tscn", "res://Prefabs/Car4.tscn",
@@ -59,6 +61,8 @@ var camera = null
 var player_cam = null           # камера игрока, вернём её после поездки
 var spawned = []
 var spawn_index = 0
+var spawn_serial = 0            # для id поставленных машин в сети
+var touched = []                # машины, в которых ездили (не поставленные): их тоже видят друзья
 var player_layer = 0
 var player_mask = 0
 var player_mode = RigidBody.MODE_RIGID
@@ -103,8 +107,16 @@ func _enter(target):
 		player = null
 		return
 	if not (target is VehicleBody):
+		var path = str(get_tree().current_scene.get_path_to(target))
 		parked.erase(target)
 		target = Parked.make_drivable(target)
+		_tag(target, "p:" + path, "parked", path)
+	elif not target.has_meta("coop_id"):
+		_tag(target, "t%d" % target.get_instance_id(), "prefab", target.filename.get_file().get_basename())
+	if not (target in spawned or target in touched):
+		touched.append(target)
+		if touched.size() > TOUCHED_LIMIT:
+			touched.pop_front()
 	car = target
 	car.set_collision_mask_bit(WORLD_BORDERS_BIT, true)   # невидимые стены по краю уровня
 	safe_spots = []
@@ -364,6 +376,49 @@ func _refresh_parked():
 		return
 	parked_scene_id = scene.get_instance_id()
 	parked = [] if coop._in_main_menu() else Parked.find_all(scene)
+	spawned = []
+	touched = []
+
+
+# ── сеть ───────────────────────────────────────────────────────────────────
+# Метка машины для друзей: id (свой у каждого игрока) и как собрать такую же модель.
+func _tag(vehicle, id, kind, ref):
+	vehicle.set_meta("coop_id", id)
+	vehicle.set_meta("coop_kind", kind)
+	vehicle.set_meta("coop_ref", ref)
+
+
+# Наши машины для пакета состояния: та, в которой сидим, поставленные по F1 и те, в которых
+# ездили. Не больше NET_CARS_LIMIT: ненадёжный пакет Steam вмещает только 1200 байт.
+func net_cars():
+	var out = []
+	var listed = []
+	for c in [car] + spawned + touched:
+		if out.size() >= NET_CARS_LIMIT or c in listed:
+			continue
+		if not is_instance_valid(c) or not c.is_inside_tree() or not c.has_meta("coop_id"):
+			continue
+		listed.append(c)
+		out.append({
+			"i": c.get_meta("coop_id"),
+			"k": c.get_meta("coop_kind"),
+			"r": c.get_meta("coop_ref"),
+			"p": c.global_transform.origin,
+			"q": Quat(c.global_transform.basis.orthonormalized()),
+			"w": c.steering,
+			"v": c.linear_velocity.dot(c.global_transform.basis.z),
+		})
+	return out
+
+
+# Друг взял стоящую машину: забираем её модель из нашего списка, чтобы собрать из неё копию.
+func claim_parked(path):
+	var scene = get_tree().current_scene
+	for root in parked:
+		if is_instance_valid(root) and str(scene.get_path_to(root)) == path:
+			parked.erase(root)
+			return root
+	return null
 
 
 # ── постановка машин ───────────────────────────────────────────────────────
@@ -387,6 +442,8 @@ func _spawn():
 	new_car.global_transform = Transform(Basis(Vector3.UP, atan2(forward.x, forward.z) + PI / 2), origin)
 	new_car.brake = PARKED_BRAKE
 	new_car.set_collision_mask_bit(WORLD_BORDERS_BIT, true)
+	spawn_serial += 1
+	_tag(new_car, "s%d" % spawn_serial, "prefab", prefab.resource_path.get_file().get_basename())
 	spawned.append(new_car)
 	_notify("машина появилась")
 	_trim_spawned()
