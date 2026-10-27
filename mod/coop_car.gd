@@ -8,7 +8,8 @@ extends Node
 #
 # Управление: W/S — газ/назад, A/D — руль, пробел — ручник, E — выйти, мышь — оглядеться.
 # F1 — поставить перед собой машину из игры (модель по кругу).
-# За рулём: N — следующий трек, L — предыдущий (музыка из машин игры, coop_radio.gd).
+# За рулём: N — следующий трек, L — предыдущий (музыка из машин игры, coop_radio.gd),
+# V — камера ближе/дальше.
 
 const HINT_ENTER = "нажмите [E], чтобы сесть"
 const HINT_EXIT = "[E] — выйти"
@@ -29,7 +30,9 @@ const SAFE_SAMPLE = 0.5         # раз в столько секунд запо
 const SAFE_KEEP = 6             # возвращаем на самое старое из них (~3 с назад), подальше от края
 const FALL_DEPTH = 15.0         # на столько ниже последнего надёжного места — значит, упала
 const FLIPPED_SECONDS = 3.0
-const WORLD_BORDERS_BIT = 1     # слой невидимых стен уровня (WorldBorders)
+const CAMERA_KEY = KEY_V        # дальность камеры по кругу, как в GTA: San Andreas
+const CAM_ZOOMS = [1.0, 1.6, 2.4]
+const CAM_ZOOM_NAMES = ["близко", "средне", "далеко"]
 const SEAT_HEIGHT = 0.5
 const EXIT_SIDE_GAP = 1.6
 const DEFAULT_CAR_LENGTH = 4.5
@@ -56,6 +59,7 @@ const SPAWN_PREFABS = [
 
 var Parked = load("user://mods/coop_parked.gd")
 var Radio = load("user://mods/coop_radio.gd")
+var Borders = load("user://mods/coop_borders.gd")
 
 var coop                        # CoopMod: нужен, чтобы не ездить, пока открыт чат
 var parked = []                 # припаркованные машины текущей сцены
@@ -77,6 +81,7 @@ var cam_pitch = 0.0
 var cam_idle = 0.0
 var cam_back = 6.0
 var cam_up = 2.5
+var cam_zoom = 0                # номер в CAM_ZOOMS; запоминается между поездками
 var look_point = Vector3()
 var hint_shown = false
 var safe_spots = []             # [Transform] последние места, где машина уверенно стояла на дороге
@@ -100,6 +105,10 @@ func _input(event):
 			return
 		if event.physical_scancode == LAST_TRACK_KEY:
 			_switch_track(-1)
+			return
+		if event.physical_scancode == CAMERA_KEY:
+			cam_zoom = (cam_zoom + 1) % CAM_ZOOMS.size()
+			_notify("камера: " + CAM_ZOOM_NAMES[cam_zoom])
 			return
 	if not event.is_action_pressed("interact") or event.is_echo() or _blocked():
 		if driving() and event is InputEventMouseMotion:
@@ -131,7 +140,7 @@ func _enter(target):
 		if touched.size() > TOUCHED_LIMIT:
 			touched.pop_front()
 	car = target
-	car.set_collision_mask_bit(WORLD_BORDERS_BIT, true)   # невидимые стены по краю уровня
+	Borders.fence_in(car)   # невидимые стены по краю уровня, раздвинутые для машин
 	safe_spots = []
 	safe_timer = 0.0
 	flipped_time = 0.0
@@ -347,7 +356,9 @@ func _camera_target():
 	back.y = 0
 	back = back.normalized() if back.length() > 0.01 else Vector3.BACK
 	back = back.rotated(Vector3.UP, cam_yaw)
-	var offset = back * cam_back * cos(cam_pitch) + Vector3.UP * (cam_up + cam_back * sin(cam_pitch))
+	var dist = cam_back * CAM_ZOOMS[cam_zoom]
+	var height = cam_up * CAM_ZOOMS[cam_zoom]
+	var offset = back * dist * cos(cam_pitch) + Vector3.UP * (height + dist * sin(cam_pitch))
 	var xf = Transform(Basis(), origin + offset)
 	return xf.looking_at(origin + Vector3.UP * CAM_LOOK_HEIGHT, Vector3.UP)
 
@@ -411,6 +422,8 @@ func _refresh_parked():
 		return
 	parked_scene_id = scene.get_instance_id()
 	parked = [] if coop._in_main_menu() else Parked.find_all(scene)
+	if not coop._in_main_menu():
+		Borders.build(scene)
 	spawned = []
 	touched = []
 
@@ -477,7 +490,7 @@ func _spawn():
 	get_tree().current_scene.add_child(new_car)
 	new_car.global_transform = Transform(Basis(Vector3.UP, atan2(forward.x, forward.z) + PI / 2), origin)
 	new_car.brake = PARKED_BRAKE
-	new_car.set_collision_mask_bit(WORLD_BORDERS_BIT, true)
+	Borders.fence_in(new_car)
 	spawn_serial += 1
 	_tag(new_car, "s%d" % spawn_serial, "prefab", prefab.resource_path.get_file().get_basename())
 	spawned.append(new_car)
