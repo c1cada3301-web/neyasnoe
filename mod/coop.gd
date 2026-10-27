@@ -480,6 +480,9 @@ func _send_state():
 		"y": player.global_transform.basis.get_euler().y,
 		"s": player.linear_velocity.length(),
 		"k": skin,
+		"sm": _is_smoking(player),
+		"fl": _flashlight_on(player),
+		"x": player.get_node("RotationHelper").rotation.x if player.has_node("RotationHelper") else 0.0,
 		"d": car.driving(),       # за рулём: у друзей вместо жителя — машина
 		"c": car.net_cars(),      # наши машины: поставленные по F1 и те, в которых ездили
 	}
@@ -518,6 +521,9 @@ func _apply_state(id, state):
 	avatar.push_state(state["p"], state["y"], state.get("s", 0.0), state.get("k", Skins.DEFAULT),
 		state.get("d") == true)
 	avatar.push_cars(state.get("c", []), car)
+	var look = state.get("x", 0.0)
+	avatar.push_props(state.get("sm") == true, state.get("fl") == true,
+		look if typeof(look) == TYPE_REAL else 0.0)
 
 
 # Состав лобби изменился: список онлайн слева сверху и цвета имён над головами.
@@ -546,6 +552,20 @@ func _members():
 	for i in range(Steam.getNumLobbyMembers(lobby_id)):
 		out.append(Steam.getLobbyMemberByIndex(lobby_id, i))
 	return out
+
+
+# Руки с сигаретой игры (PlayerSmokingHands1) висят на камере, а камера на старте уходит из
+# игрока в корень уровня; по имени их не найти — под картой есть копия без скрипта (прогрев
+# шейдеров). Скрипт фонарика игры держит ссылку на настоящие руки — берём её.
+func _is_smoking(player):
+	var light = player.get_node_or_null("RotationHelper/Flashlight")
+	var hands = light.get("smoking_hands") if light else null
+	return is_instance_valid(hands) and hands.get("is_active") == true
+
+
+func _flashlight_on(player):
+	var light = player.get_node_or_null("RotationHelper/Flashlight")
+	return light != null and light.visible
 
 
 func _local_player():

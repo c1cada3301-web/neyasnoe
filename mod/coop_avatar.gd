@@ -1,9 +1,11 @@
 extends Spatial
 # Второй игрок в мире: выбранный им скин (прохожий из игры без скрипта, коллизий и триггеров),
-# плавно догоняет присланные позиции. Над головой — имя из Steam.
+# плавно догоняет присланные позиции. Над головой — имя из Steam. Сигарета и фонарик —
+# из coop_props.gd.
 
 var Skins = load("user://mods/coop_skins.gd")
 var Ghost = load("user://mods/coop_ghost_car.gd")
+var Props = load("user://mods/coop_props.gd")
 
 const WALK_THRESHOLD = 0.5
 const FOLLOW_SPEED = 12.0
@@ -25,6 +27,12 @@ var has_state = false
 var label
 var ghosts = {}                 # id машины друга → её копия у нас
 var failed = {}                 # id, которые не удалось собрать: не пробуем каждый пакет
+var cigarette                   # у рта скина; пересобирается со скином
+var flashlight
+var smoking = false
+var lit = false
+var pitch = 0.0
+var driving_now = false
 
 
 func _ready():
@@ -47,6 +55,8 @@ func _ready():
 	var layer = CanvasLayer.new()
 	layer.add_child(label)
 	add_child(layer)
+	flashlight = Props.flashlight()
+	add_child(flashlight)
 	visible = false
 
 
@@ -69,12 +79,18 @@ func set_skin(id):
 		return
 	add_child(skin["node"])
 	Skins.play_idle(skin, 0.0)
+	if cigarette and is_instance_valid(cigarette):
+		cigarette.queue_free()
+	cigarette = Props.attach_cigarette(self, skin["node"])
+	_update_props()
 
 
 func push_state(pos, yaw, move_speed, id, driving = false):
+	driving_now = driving
 	set_skin(id)
 	if skin:
 		skin["node"].visible = not driving   # за рулём видна машина, над ней — имя
+	_update_props()
 	target_pos = pos
 	target_yaw = yaw
 	speed = move_speed
@@ -83,6 +99,22 @@ func push_state(pos, yaw, move_speed, id, driving = false):
 		rotation.y = yaw
 	has_state = true
 	visible = true
+
+
+# Курит ли друг, горит ли у него фонарик и куда он смотрит (наклон головы, радианы).
+func push_props(is_smoking, is_lit, look_pitch):
+	smoking = is_smoking
+	lit = is_lit
+	pitch = clamp(look_pitch, -1.5, 1.5)
+	_update_props()
+
+
+func _update_props():
+	if cigarette and is_instance_valid(cigarette):
+		cigarette.visible = smoking and not driving_now
+	if flashlight:
+		flashlight.visible = lit and not driving_now
+		flashlight.rotation.x = pitch
 
 
 # ── машины друга ───────────────────────────────────────────────────────────
