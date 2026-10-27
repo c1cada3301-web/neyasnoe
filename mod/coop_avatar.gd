@@ -106,6 +106,9 @@ func push_cars(cars, local_cars):
 			ghosts[id] = ghost
 		if ghost != null and is_instance_valid(ghost):
 			ghost.push(c["p"], c["q"], clamp(c["w"], -1.0, 1.0), c["v"])
+			var track = c.get("m")
+			if typeof(track) == TYPE_INT:
+				ghost.set_track(track)
 	for id in ghosts.keys():
 		if not seen.has(id):
 			if is_instance_valid(ghosts[id]):

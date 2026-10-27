@@ -8,6 +8,7 @@ extends Node
 #
 # Управление: W/S — газ/назад, A/D — руль, пробел — ручник, E — выйти, мышь — оглядеться.
 # F1 — поставить перед собой машину из игры (модель по кругу).
+# За рулём: N — следующий трек, L — предыдущий (музыка из машин игры, coop_radio.gd).
 
 const HINT_ENTER = "нажмите [E], чтобы сесть"
 const HINT_EXIT = "[E] — выйти"
@@ -39,6 +40,8 @@ const CAM_RECENTER_DELAY = 1.5
 const CAM_RECENTER_SPEED = 2.0
 const CAM_MAX_PITCH = 1.2
 const SPAWN_KEY = KEY_F1           # F2–F8 и F11 заняты игрой, F12 — скриншот Steam
+const NEXT_TRACK_KEY = KEY_N       # физические клавиши: работают и в русской раскладке
+const LAST_TRACK_KEY = KEY_L
 const SPAWN_DISTANCE = 5.0
 const SPAWN_LIMIT = 3           # больше — самая старая поставленная машина исчезает
 const PARKED_BRAKE = 5.0
@@ -52,6 +55,7 @@ const SPAWN_PREFABS = [
 ]
 
 var Parked = load("user://mods/coop_parked.gd")
+var Radio = load("user://mods/coop_radio.gd")
 
 var coop                        # CoopMod: нужен, чтобы не ездить, пока открыт чат
 var parked = []                 # припаркованные машины текущей сцены
@@ -90,6 +94,13 @@ func _input(event):
 		if not _blocked() and not driving():
 			_spawn()
 		return
+	if driving() and event is InputEventKey and event.pressed and not event.echo and not _blocked():
+		if event.physical_scancode == NEXT_TRACK_KEY:
+			_switch_track(1)
+			return
+		if event.physical_scancode == LAST_TRACK_KEY:
+			_switch_track(-1)
+			return
 	if not event.is_action_pressed("interact") or event.is_echo() or _blocked():
 		if driving() and event is InputEventMouseMotion:
 			_look(event.relative)
@@ -198,6 +209,18 @@ func _drop_if_gone():
 	car = null
 	player = null
 	camera = null
+
+
+# ── музыка ─────────────────────────────────────────────────────────────────
+func _switch_track(step):
+	var count = Radio.TRACKS.size()
+	var index = Radio.track_of(car)
+	if index == Radio.NONE:
+		index = 0 if step > 0 else count - 1
+	else:
+		index = posmod(index + step, count)
+	Radio.set_track(car, index)
+	_notify("музыка: " + Radio.title(index))
 
 
 # ── падение с карты ────────────────────────────────────────────────────────
@@ -419,6 +442,7 @@ func net_cars():
 			"q": Quat(c.global_transform.basis.orthonormalized()),
 			"w": c.steering,
 			"v": c.linear_velocity.dot(c.global_transform.basis.z),
+			"m": Radio.track_of(c),
 		})
 	return out
 

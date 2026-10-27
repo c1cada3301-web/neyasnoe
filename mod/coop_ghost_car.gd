@@ -7,6 +7,9 @@ const FOLLOW_SPEED = 10.0
 const TELEPORT_DISTANCE = 8.0
 const DEFAULT_WHEEL_RADIUS = 0.35
 
+var Radio = load("user://mods/coop_radio.gd")
+var track = -2                  # ещё не знаем, что играет у друга
+
 var target_pos = Vector3()
 var target_rot = Quat()
 var steer = 0.0
@@ -37,6 +40,14 @@ func push(pos, rot, steering, forward_speed):
 	if not has_state or global_transform.origin.distance_to(pos) > TELEPORT_DISTANCE:
 		global_transform = Transform(Basis(rot), pos)
 	has_state = true
+
+
+# Номер трека из TRACKS или NONE; меняем, только если у друга сменился трек.
+func set_track(index):
+	if index < Radio.NONE or index >= Radio.TRACKS.size() or index == track:
+		return
+	track = index
+	Radio.set_track(self, index)
 
 
 func _process(delta):
